@@ -4,6 +4,7 @@ go 1.26.9
 
 require (
 	github.com/KarpelesLab/gowebp v0.1.1
+	github.com/coder/websocket v1.8.15
 	golang.org/x/image v0.47.0
 	modernc.org/sqlite v1.60.1
 )

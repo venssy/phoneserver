@@ -132,6 +132,12 @@ type MCPConfig struct {
 	Path     string `json:"path"`
 }
 
+type BrowserConfig struct {
+	// Socket overrides Edge's abstract Unix socket. Empty means auto-detect:
+	// inspect /proc/<com.microsoft.emmx pid>/fd, then /proc/net/unix.
+	Socket string `json:"socket"`
+}
+
 type Config struct {
 	Listen      string         `json:"listen"`
 	APIToken    string         `json:"api_token"`
@@ -151,6 +157,7 @@ type Config struct {
 	Stream      StreamConfig   `json:"stream"`
 	Notify      NotifyConfig   `json:"notify"`
 	MCP         MCPConfig      `json:"mcp"`
+	Browser     BrowserConfig  `json:"browser"`
 	Bridge      BridgeConfig   `json:"bridge"`
 	Files       FilesConfig    `json:"files"`
 	History     HistoryConfig  `json:"history"`
@@ -226,7 +233,8 @@ func defaultConfig() Config {
 			ReadOnly: false,
 			Path:     "/mcp",
 		},
-		Bridge: defaultBridgeConfig(),
+		Browser: BrowserConfig{},
+		Bridge:  defaultBridgeConfig(),
 		Files: FilesConfig{
 			Enabled: true,
 			Shares: map[string]string{
@@ -851,11 +859,25 @@ func (a *App) handleEndpoints(w http.ResponseWriter, r *http.Request) {
 			{"method": "GET", "path": "/api/v1/stream/screen/mjpeg", "desc": "live screen as multipart webp frames (fallback); ?fps= ?width= ?quality="},
 			{"method": "GET", "path": "/api/v1/stream/status", "desc": "active encoders, measured fps/bitrate, display state"},
 			{"method": "GET", "path": "/api/v1/stream/display", "desc": "is the panel awake and does screenrecord accept it right now"},
+			{"method": "GET", "path": "/api/v1/display/info", "desc": "display width, height, density and wake/brightness state"},
 
 			{"method": "GET", "path": "/api/v1/ui/dump", "desc": "uiautomator hierarchy as JSON (text, bounds, center, clickable)"},
 			{"method": "GET", "path": "/api/v1/ui/current", "desc": "focused window, foreground app, keyboard, keyguard"},
 			{"method": "GET", "path": "/api/v1/ui/find", "desc": "find elements by text/desc/id/class"},
 			{"method": "POST", "path": "/api/v1/ui/click", "desc": "{\"text\":\"登录\"} — find an element and tap its centre"},
+			{"method": "GET", "path": "/api/v1/browser/status", "desc": "Microsoft Edge CDP socket, version and page targets"},
+			{"method": "POST", "path": "/api/v1/browser/navigate", "desc": "{\"url\":\"https://example.com\"} — navigate Edge via CDP"},
+			{"method": "GET", "path": "/api/v1/browser/snapshot", "desc": "DOM snapshot of the current Edge page with eN refs; ?max_nodes="},
+			{"method": "GET", "path": "/api/v1/browser/find", "desc": "find text/elements in the Edge DOM snapshot; ?text="},
+			{"method": "POST", "path": "/api/v1/browser/click", "desc": "{\"target\":\"e12\"} or {\"x\":1,\"y\":2}; Edge CDP click"},
+			{"method": "POST", "path": "/api/v1/browser/type", "desc": "{\"text\":\"hello\",\"target\":\"e3\",\"submit\":false}"},
+			{"method": "POST", "path": "/api/v1/browser/press_key", "desc": "{\"key\":\"Enter\"} — CDP key event"},
+			{"method": "POST", "path": "/api/v1/browser/scroll", "desc": "{\"direction\":\"down\",\"distance\":600}"},
+			{"method": "POST", "path": "/api/v1/browser/back", "desc": "{\"steps\":1} — browser history back"},
+			{"method": "POST", "path": "/api/v1/browser/wait_for", "desc": "{\"text\":\"Ready\",\"time\":10}"},
+			{"method": "GET", "path": "/api/v1/browser/screenshot", "desc": "Edge page screenshot from the browser engine; ?format=png|jpeg|webp&meta=1&base64=1"},
+			{"method": "POST", "path": "/api/v1/browser/evaluate", "desc": "{\"expression\":\"document.title\"} — run JavaScript in Edge"},
+			{"method": "POST", "path": "/api/v1/browser/close", "desc": "{\"kill\":false} — close the Edge page or force-stop Edge"},
 			{"method": "POST", "path": "/api/v1/input/tap", "desc": "{\"x\":540,\"y\":1200}"},
 			{"method": "POST", "path": "/api/v1/input/swipe", "desc": "{\"x1\":..,\"y1\":..,\"x2\":..,\"y2\":..,\"duration_ms\":300}"},
 			{"method": "POST", "path": "/api/v1/input/gesture", "desc": "{\"points\":[[x,y],...],\"duration_ms\":400} — chained swipes"},
@@ -1218,12 +1240,28 @@ func main() {
 	mux.HandleFunc("/api/v1/stream/screen/mjpeg", app.guard(app.handleScreenMjpeg))
 	mux.HandleFunc("/api/v1/stream/status", app.get(app.handleStreamStatus))
 	mux.HandleFunc("/api/v1/stream/display", app.get(app.handleStreamDisplay))
+	mux.HandleFunc("/api/v1/display/info", app.get(app.handleDisplayInfo))
 
 	// UI automation (ui.go)
 	mux.HandleFunc("/api/v1/ui/dump", app.get(app.handleUIDump))
 	mux.HandleFunc("/api/v1/ui/current", app.get(app.handleUICurrent))
 	mux.HandleFunc("/api/v1/ui/find", app.get(app.handleUIFind))
 	mux.HandleFunc("/api/v1/ui/click", app.post(app.handleUIClick))
+
+	// Microsoft Edge browser-use surface over native CDP (browser_cdp.go)
+	mux.HandleFunc("/api/v1/browser/status", app.get(app.handleBrowserStatus))
+	mux.HandleFunc("/api/v1/browser/navigate", app.post(app.handleBrowserNavigate))
+	mux.HandleFunc("/api/v1/browser/snapshot", app.get(app.handleBrowserSnapshot))
+	mux.HandleFunc("/api/v1/browser/find", app.get(app.handleBrowserFind))
+	mux.HandleFunc("/api/v1/browser/click", app.post(app.handleBrowserClick))
+	mux.HandleFunc("/api/v1/browser/type", app.post(app.handleBrowserType))
+	mux.HandleFunc("/api/v1/browser/press_key", app.post(app.handleBrowserPressKey))
+	mux.HandleFunc("/api/v1/browser/scroll", app.post(app.handleBrowserScroll))
+	mux.HandleFunc("/api/v1/browser/back", app.post(app.handleBrowserBack))
+	mux.HandleFunc("/api/v1/browser/wait_for", app.post(app.handleBrowserWaitFor))
+	mux.HandleFunc("/api/v1/browser/screenshot", app.get(app.handleBrowserScreenshot))
+	mux.HandleFunc("/api/v1/browser/evaluate", app.post(app.handleBrowserEvaluate))
+	mux.HandleFunc("/api/v1/browser/close", app.post(app.handleBrowserClose))
 
 	// control (control.go)
 	mux.HandleFunc("/api/v1/input/tap", app.post(app.handleInputTap))

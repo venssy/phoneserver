@@ -324,7 +324,7 @@ func (a *App) handleUIDump(w http.ResponseWriter, r *http.Request) {
 	if !ws.LayoutReady {
 		res.Warnings = append(res.Warnings, "this dump may only contain keyguard/launcher nodes; the useful ones appear once the phone is awake and unlocked")
 	}
-	if q.Get("all") == "1" {
+	if v := q.Get("all"); v == "1" || v == "true" {
 		writeJSON(w, http.StatusOK, map[string]any{"total_nodes": res.Total, "rotation": res.Rotation, "dump_ms": res.DumpMS, "elements": res.Elements, "window": ws})
 		return
 	}

@@ -75,6 +75,7 @@ const PATHS: Path[] = [
   { p: "mcp.http", label: "启用 MCP HTTP 端点", kind: "bool" },
   { p: "mcp.read_only", label: "MCP 只读模式", kind: "bool", help: "打开后 AI agent 只能读，不能操作手机" },
   { p: "mcp.path", label: "MCP 路径", kind: "str", help: "默认 /mcp" },
+  { p: "browser.socket", label: "Edge DevTools socket", kind: "str", help: "留空自动发现；通常为 @chrome_devtools_remote" },
   { p: "bridge.enabled", label: "启用 Termux:API 桥", kind: "bool" },
   { p: "bridge.prefix", label: "Termux 前缀", kind: "str" },
   { p: "bridge.home", label: "Termux HOME", kind: "str" },
@@ -311,6 +312,7 @@ export default function Config() {
       {group("实时画面", PATHS.filter((f) => f.p.startsWith("stream.")).map((f) => f.p))}
       {group("通知", PATHS.filter((f) => f.p.startsWith("notify.")).map((f) => f.p))}
       {group("MCP（给 AI agent）", PATHS.filter((f) => f.p.startsWith("mcp.")).map((f) => f.p))}
+      {group("Edge 浏览器", PATHS.filter((f) => f.p.startsWith("browser.")).map((f) => f.p))}
       {group("Termux:API 桥", PATHS.filter((f) => f.p.startsWith("bridge.")).map((f) => f.p))}
 
       <Card title="文件服务与 WebDAV" action={<SmallBtn onClick={() => void save(["files"])}>保存本组</SmallBtn>}>

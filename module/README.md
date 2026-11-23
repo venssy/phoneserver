@@ -52,6 +52,7 @@ Phone Control Server 2.0.0 — 手机上的自托管控制器
           GET /api/v1/stream/screen/mjpeg         实时画面降级（webp 帧）
           GET /api/v1/stream/status                活跃编码器、实测帧率/码率
           GET /api/v1/stream/display               现在能不能开流（含真实探测）
+          GET /api/v1/display/info                 分辨率、密度、亮屏/亮度
 
 输入      POST /api/v1/input/{tap,swipe,gesture,text,key,keys}
           GET  /api/v1/ui/dump                     控件树（文本/边界/中心）
@@ -129,6 +130,15 @@ MCP（给 AI agent）
       "args":["-mcp","-config","/path/to/config.json","-mcp-url","http://<手机IP>:8080"]}}}
 
     mcp.read_only=true 时只暴露只读工具。
+
+    Android Edge（Browser Use 风格）：
+      browser_navigate / browser_navigate_back
+      browser_snapshot / browser_find
+      browser_click / browser_type / browser_press_key / browser_scroll / browser_wait_for
+      browser_take_screenshot / browser_evaluate / browser_close / browser_status
+    底层使用 com.microsoft.emmx 原生 CDP，直连 root-only DevTools 抽象 Unix socket；
+    默认不开放原始 9222 端口。自动发现失败时设置 browser.socket
+    （例如 {"browser":{"socket":"@chrome_devtools_remote"}}）。
 
 界面
 ----

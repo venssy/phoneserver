@@ -233,6 +233,7 @@ curl -H 'X-API-Key: <t>' -o out.h264 \
 ```sh
 curl -H 'X-API-Key: <t>' 'http://127.0.0.1:8080/api/v1/stream/status'   # 活跃编码器、实测帧率/码率
 curl -H 'X-API-Key: <t>' 'http://127.0.0.1:8080/api/v1/stream/display'  # 现在能不能开流（含真实探测结果）
+curl -H 'X-API-Key: <t>' 'http://127.0.0.1:8080/api/v1/display/info'    # 分辨率、密度、亮屏/亮度
 curl -H 'X-API-Key: <t>' 'http://127.0.0.1:8080/api/v1/stream/screen/mjpeg?fps=2&width=540'  # webp 帧降级
 ```
 
@@ -537,7 +538,16 @@ curl -s -X POST http://127.0.0.1:8080/mcp \
   -d '{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{}}'
 ```
 
-工具按能力分组（遥测 / 截图 / 画面信息 / UI 与输入 / 应用 / 设备控制 / 通知与消息 / 相机麦克风 / 文件与 WebDAV / 桥与配置 / 历史 / shell 与电源）。要点：
+工具按能力分组（遥测 / 截图 / 画面信息 / UI 与输入 / 应用 / 设备控制 / 通知与消息 / 相机麦克风 / 文件与 WebDAV / 桥与配置 / 历史 / shell 与电源）。另外提供一组 `browser_*` 工具，把 Android 版 Microsoft Edge 暴露成 Browser Use 风格接口：
+
+- `browser_navigate` / `browser_navigate_back`：通过 CDP 导航、后退；Edge 未运行时会先用 `ACTION_VIEW` 启动一次。
+- `browser_snapshot` / `browser_find`：从页面 DOM 读取快照、按文本定位；可交互元素带 `eN` ref，点击时传 `target="e12"`。
+- `browser_click` / `browser_type` / `browser_press_key` / `browser_scroll` / `browser_wait_for`：用 CDP 鼠标、文本、键盘、滚轮和 DOM 轮询完成页面动作。
+- `browser_take_screenshot` / `browser_evaluate` / `browser_close` / `browser_status`：截取浏览器视口、执行页面 JavaScript、关闭页面或诊断 CDP socket。
+
+底层使用 Edge 原生 Chromium DevTools Protocol。phoneserver 以 root 身份发现 `com.microsoft.emmx` 的 DevTools 抽象 Unix socket（通常是 `@chrome_devtools_remote`），并通过自带的 Go 客户端直接连接；默认不监听 `9222`，也不把原始 CDP 暴露到局域网。若自动发现失败，可在配置里设置 `"browser": {"socket": "@chrome_devtools_remote"}`。浏览器命令仍需要设备 root 权限才能连接 Edge 的调试 socket；页面动作可以在 Edge 处于后台时完成。
+
+要点：
 
 - 图片类工具（`phone_screenshot`、`phone_camera_photo`）返回 MCP 的 image 内容块；录音返回 audio 块。
 - 串流不能塞进 `tools/call`（长连接），所以只提供「取串流信息」的工具，并在描述里给出 URL 与帧协议，让 agent 自己决定怎么消费。

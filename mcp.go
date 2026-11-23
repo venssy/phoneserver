@@ -94,6 +94,13 @@ const mcpInstructions = `这是用户自己手机上运行的 phoneserver 控制
 - 图片工具返回 image 内容块（base64 + mimeType），音频工具返回 audio 内容块，并都附一条说明尺寸/质量/字节数的文本。
 - 屏幕实时画面（GET /api/v1/stream/screen，annexb-len-prefix 的 H.264 Annex-B）是长连接，不能通过 tools/call 返回；请用 HTTP 客户端直接连接。`
 
+const mcpBrowserInstructions = `
+
+Android Edge（browser-use 接口）：
+- 用 browser_navigate 在 Microsoft Edge 中打开 URL，browser_snapshot 从页面 DOM 读取带 eN ref 的可交互元素，browser_find 搜索文本/元素，browser_click 可传 eN ref、可见文本或 viewport "x,y"，browser_type 输入文本，browser_press_key 按键，browser_wait_for 等待文本/时间，browser_take_screenshot 截取浏览器视口。
+- 这些工具走 Edge 原生 Chromium DevTools Protocol。phoneserver 以 root 身份直连 Edge 的抽象 Unix socket（自动发现，通常类似 @chrome_devtools_remote），不会把原始 CDP 端口暴露到局域网。Edge 未运行时，browser_navigate 会先用 ACTION_VIEW 启动一次；之后页面操作可在后台完成。
+- browser_evaluate 可在页面中执行 JavaScript；它不是 shell。browser_snapshot/browser_find 返回 DOM 层元素，不再依赖 Android accessibility 或前台窗口。`
+
 // ---------- sessions ----------
 
 // mcpSessions is deliberately thin. The HTTP transport is stateless; the id
@@ -371,7 +378,7 @@ func (s *mcpServer) handleInitialize(req rpcRequest, notification bool) (*rpcRes
 			"tools": map[string]any{"listChanged": false},
 		},
 		"serverInfo":   map[string]any{"name": mcpServerName, "version": version},
-		"instructions": mcpInstructions,
+		"instructions": mcpInstructions + mcpBrowserInstructions,
 	}), true
 }
 

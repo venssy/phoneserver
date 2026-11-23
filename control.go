@@ -110,6 +110,23 @@ type panelSize struct {
 	H int `json:"height"`
 }
 
+// parseDisplayDensity keeps the override ahead of the physical density, because
+// wm reports override last and that is the value actually used for rendering.
+func parseDisplayDensity(out string) int {
+	density := 0
+	re := regexp.MustCompile(`(?m)^\s*(Physical|Override) density:\s*(\d+)`)
+	for _, m := range re.FindAllStringSubmatch(out, -1) {
+		n, _ := strconv.Atoi(m[2])
+		if n <= 0 {
+			continue
+		}
+		// wm prints Physical first and Override second, so the last value is
+		// the effective density.
+		density = n
+	}
+	return density
+}
+
 // displaySize reports the panel size, used to keep injected coordinates sane.
 func (a *App) displaySize(ctx context.Context) (int, int) {
 	ps, err := cacheGet(a.cache, "wmsize", 5*time.Minute, func() (panelSize, error) {
@@ -140,6 +157,51 @@ func (a *App) displaySize(ctx context.Context) (int, int) {
 		return 0, 0
 	}
 	return ps.W, ps.H
+}
+
+func (a *App) displayDensity(ctx context.Context) int {
+	v, err := cacheGet(a.cache, "wmdensity", 5*time.Minute, func() (int, error) {
+		out, err := a.runCmd(ctx, 10*time.Second, "/system/bin/wm", "density")
+		if err != nil && out == "" {
+			return 0, fmt.Errorf("wm density: %v", err)
+		}
+		n := parseDisplayDensity(out)
+		if n <= 0 {
+			return 0, fmt.Errorf("could not parse `wm density` output")
+		}
+		return n, nil
+	})
+	if err != nil {
+		return 0
+	}
+	return v
+}
+
+func (a *App) handleDisplayInfo(w http.ResponseWriter, r *http.Request) {
+	ctx, cancel := context.WithTimeout(r.Context(), 15*time.Second)
+	defer cancel()
+	width, height := a.displaySize(ctx)
+	density := a.displayDensity(ctx)
+	d := a.collectDisplay()
+	res := map[string]any{
+		"width":             width,
+		"height":            height,
+		"density_dpi":       density,
+		"screen_on":         d.ScreenOn,
+		"wakefulness":       d.Wakefulness,
+		"brightness":        d.Brightness,
+		"brightness_max":    d.BrightnessMax,
+		"coordinate_space":  "physical display pixels, top-left origin",
+		"wake_before_input": "input keyevent KEYCODE_WAKEUP",
+		"screenrecord_note": "screenrecord needs an awake panel; input can wake it but does not unlock the keyguard",
+	}
+	if width == 0 || height == 0 {
+		res["size_error"] = "wm size was unavailable"
+	}
+	if density == 0 {
+		res["density_error"] = "wm density was unavailable"
+	}
+	writeJSON(w, http.StatusOK, res)
 }
 
 // ---------- input ----------
