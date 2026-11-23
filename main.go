@@ -133,6 +133,8 @@ type MCPConfig struct {
 }
 
 type BrowserConfig struct {
+	// Enabled gates both the MCP tools and /api/v1/browser/* endpoints.
+	Enabled bool `json:"enabled"`
 	// Socket overrides Edge's abstract Unix socket. Empty means auto-detect:
 	// inspect /proc/<com.microsoft.emmx pid>/fd, then /proc/net/unix.
 	Socket string `json:"socket"`
@@ -233,7 +235,7 @@ func defaultConfig() Config {
 			ReadOnly: false,
 			Path:     "/mcp",
 		},
-		Browser: BrowserConfig{},
+		Browser: BrowserConfig{Enabled: false},
 		Bridge:  defaultBridgeConfig(),
 		Files: FilesConfig{
 			Enabled: true,
@@ -1249,19 +1251,19 @@ func main() {
 	mux.HandleFunc("/api/v1/ui/click", app.post(app.handleUIClick))
 
 	// Microsoft Edge browser-use surface over native CDP (browser_cdp.go)
-	mux.HandleFunc("/api/v1/browser/status", app.get(app.handleBrowserStatus))
-	mux.HandleFunc("/api/v1/browser/navigate", app.post(app.handleBrowserNavigate))
-	mux.HandleFunc("/api/v1/browser/snapshot", app.get(app.handleBrowserSnapshot))
-	mux.HandleFunc("/api/v1/browser/find", app.get(app.handleBrowserFind))
-	mux.HandleFunc("/api/v1/browser/click", app.post(app.handleBrowserClick))
-	mux.HandleFunc("/api/v1/browser/type", app.post(app.handleBrowserType))
-	mux.HandleFunc("/api/v1/browser/press_key", app.post(app.handleBrowserPressKey))
-	mux.HandleFunc("/api/v1/browser/scroll", app.post(app.handleBrowserScroll))
-	mux.HandleFunc("/api/v1/browser/back", app.post(app.handleBrowserBack))
-	mux.HandleFunc("/api/v1/browser/wait_for", app.post(app.handleBrowserWaitFor))
-	mux.HandleFunc("/api/v1/browser/screenshot", app.get(app.handleBrowserScreenshot))
-	mux.HandleFunc("/api/v1/browser/evaluate", app.post(app.handleBrowserEvaluate))
-	mux.HandleFunc("/api/v1/browser/close", app.post(app.handleBrowserClose))
+	mux.HandleFunc("/api/v1/browser/status", app.get(app.browserGuard(app.handleBrowserStatus)))
+	mux.HandleFunc("/api/v1/browser/navigate", app.post(app.browserGuard(app.handleBrowserNavigate)))
+	mux.HandleFunc("/api/v1/browser/snapshot", app.get(app.browserGuard(app.handleBrowserSnapshot)))
+	mux.HandleFunc("/api/v1/browser/find", app.get(app.browserGuard(app.handleBrowserFind)))
+	mux.HandleFunc("/api/v1/browser/click", app.post(app.browserGuard(app.handleBrowserClick)))
+	mux.HandleFunc("/api/v1/browser/type", app.post(app.browserGuard(app.handleBrowserType)))
+	mux.HandleFunc("/api/v1/browser/press_key", app.post(app.browserGuard(app.handleBrowserPressKey)))
+	mux.HandleFunc("/api/v1/browser/scroll", app.post(app.browserGuard(app.handleBrowserScroll)))
+	mux.HandleFunc("/api/v1/browser/back", app.post(app.browserGuard(app.handleBrowserBack)))
+	mux.HandleFunc("/api/v1/browser/wait_for", app.post(app.browserGuard(app.handleBrowserWaitFor)))
+	mux.HandleFunc("/api/v1/browser/screenshot", app.get(app.browserGuard(app.handleBrowserScreenshot)))
+	mux.HandleFunc("/api/v1/browser/evaluate", app.post(app.browserGuard(app.handleBrowserEvaluate)))
+	mux.HandleFunc("/api/v1/browser/close", app.post(app.browserGuard(app.handleBrowserClose)))
 
 	// control (control.go)
 	mux.HandleFunc("/api/v1/input/tap", app.post(app.handleInputTap))

@@ -75,6 +75,7 @@ const PATHS: Path[] = [
   { p: "mcp.http", label: "启用 MCP HTTP 端点", kind: "bool" },
   { p: "mcp.read_only", label: "MCP 只读模式", kind: "bool", help: "打开后 AI agent 只能读，不能操作手机" },
   { p: "mcp.path", label: "MCP 路径", kind: "str", help: "默认 /mcp" },
+  { p: "browser.enabled", label: "启用 Edge Browser 工具", kind: "bool", help: "默认关；打开后暴露 phone_browser_* 和 /api/v1/browser/*" },
   { p: "browser.socket", label: "Edge DevTools socket", kind: "str", help: "留空自动发现；通常为 @chrome_devtools_remote" },
   { p: "bridge.enabled", label: "启用 Termux:API 桥", kind: "bool" },
   { p: "bridge.prefix", label: "Termux 前缀", kind: "str" },

@@ -97,9 +97,9 @@ const mcpInstructions = `这是用户自己手机上运行的 phoneserver 控制
 const mcpBrowserInstructions = `
 
 Android Edge（browser-use 接口）：
-- 用 browser_navigate 在 Microsoft Edge 中打开 URL，browser_snapshot 从页面 DOM 读取带 eN ref 的可交互元素，browser_find 搜索文本/元素，browser_click 可传 eN ref、可见文本或 viewport "x,y"，browser_type 输入文本，browser_press_key 按键，browser_wait_for 等待文本/时间，browser_take_screenshot 截取浏览器视口。
-- 这些工具走 Edge 原生 Chromium DevTools Protocol。phoneserver 以 root 身份直连 Edge 的抽象 Unix socket（自动发现，通常类似 @chrome_devtools_remote），不会把原始 CDP 端口暴露到局域网。Edge 未运行时，browser_navigate 会先用 ACTION_VIEW 启动一次；之后页面操作可在后台完成。
-- browser_evaluate 可在页面中执行 JavaScript；它不是 shell。browser_snapshot/browser_find 返回 DOM 层元素，不再依赖 Android accessibility 或前台窗口。`
+- 用 phone_browser_navigate 在 Microsoft Edge 中打开 URL，phone_browser_snapshot 从页面 DOM 读取带 eN ref 的可交互元素，phone_browser_find 搜索文本/元素，phone_browser_click 可传 eN ref、可见文本或 viewport "x,y"，phone_browser_type 输入文本，phone_browser_press_key 按键，phone_browser_wait_for 等待文本/时间，phone_browser_take_screenshot 截取浏览器视口。
+- 这些工具走 Edge 原生 Chromium DevTools Protocol。phoneserver 以 root 身份直连 Edge 的抽象 Unix socket（自动发现，通常类似 @chrome_devtools_remote），不会把原始 CDP 端口暴露到局域网。Edge 未运行时，phone_browser_navigate 会先用 ACTION_VIEW 启动一次；之后页面操作可在后台完成。
+- phone_browser_evaluate 可在页面中执行 JavaScript；它不是 shell。phone_browser_snapshot/phone_browser_find 返回 DOM 层元素，不再依赖 Android accessibility 或前台窗口。`
 
 // ---------- sessions ----------
 
@@ -324,10 +324,11 @@ func (s *mcpServer) handleMessage(raw json.RawMessage) (*rpcResponse, bool) {
 		if err := decodeJSON(req.Params, &p); err != nil {
 			return errorResponse(req.idOrNull(), -32602, "Invalid params: "+err.Error()), true
 		}
+		tools := toolListJSON(s.readOnly(), s.browserEnabled())
 		return resultResponse(req.idOrNull(), map[string]any{
-			"tools":        toolListJSON(s.readOnly()),
+			"tools":        tools,
 			"read_only":    s.readOnly(),
-			"tool_count":   len(toolListJSON(s.readOnly())),
+			"tool_count":   len(tools),
 			"server":       mcpServerName,
 			"instructions": "read_only=true 时只列出不会改变手机状态的工具（when true, only tools that cannot change the phone's state are listed）",
 		}), true
@@ -356,7 +357,8 @@ func (s *mcpServer) handleMessage(raw json.RawMessage) (*rpcResponse, bool) {
 	}
 }
 
-func (s *mcpServer) readOnly() bool { return s.cfgFn().MCP.ReadOnly }
+func (s *mcpServer) readOnly() bool       { return s.cfgFn().MCP.ReadOnly }
+func (s *mcpServer) browserEnabled() bool { return s.cfgFn().Browser.Enabled }
 
 func (s *mcpServer) handleInitialize(req rpcRequest, notification bool) (*rpcResponse, bool) {
 	if notification {
@@ -372,13 +374,17 @@ func (s *mcpServer) handleInitialize(req rpcRequest, notification bool) (*rpcRes
 		// supported one and let the client decide what to do.
 		proto = mcpProtocolFallback
 	}
+	instructions := mcpInstructions
+	if s.browserEnabled() {
+		instructions += mcpBrowserInstructions
+	}
 	return resultResponse(req.idOrNull(), map[string]any{
 		"protocolVersion": proto,
 		"capabilities": map[string]any{
 			"tools": map[string]any{"listChanged": false},
 		},
 		"serverInfo":   map[string]any{"name": mcpServerName, "version": version},
-		"instructions": mcpInstructions + mcpBrowserInstructions,
+		"instructions": instructions,
 	}), true
 }
 
@@ -403,6 +409,12 @@ func (s *mcpServer) handleToolsCall(req rpcRequest) (*rpcResponse, bool) {
 	tool, ok := findTool(p.Name)
 	if !ok {
 		return errorResponse(req.idOrNull(), -32602, "Invalid params: unknown tool "+p.Name), true
+	}
+	if strings.HasPrefix(tool.name, "phone_browser_") && !s.browserEnabled() {
+		return resultResponse(req.idOrNull(), map[string]any{
+			"content": []contentBlock{textBlock(browserDisabledMessage)},
+			"isError": true,
+		}), true
 	}
 	if s.readOnly() && !tool.readOnly {
 		return resultResponse(req.idOrNull(), map[string]any{
@@ -755,10 +767,13 @@ func downloadBlocks(t *mcpTool, args map[string]any, contentType string, data []
 
 // toolListJSON is what tools/list returns. In read-only mode the mutating tools
 // are simply absent — an agent cannot call what it cannot see.
-func toolListJSON(readOnly bool) []map[string]any {
+func toolListJSON(readOnly, browserEnabled bool) []map[string]any {
 	out := make([]map[string]any, 0, len(mcpToolTable))
 	for _, t := range mcpToolTable {
 		if readOnly && !t.readOnly {
+			continue
+		}
+		if !browserEnabled && strings.HasPrefix(t.name, "phone_browser_") {
 			continue
 		}
 		out = append(out, map[string]any{

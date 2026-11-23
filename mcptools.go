@@ -240,40 +240,40 @@ func (t *mcpTool) transportKey(arg string) string {
 func buildMCPTools() []*mcpTool {
 	tools := []*mcpTool{
 		// ----- browser use (Microsoft Edge on Android) -----
-		newTool("browser_status",
+		newTool("phone_browser_status",
 			"检查 Edge DevTools 抽象 Unix socket、版本和页面目标（inspect Edge CDP readiness）",
 			"GET", "/api/v1/browser/status").ro().
 			bl("include_targets", "保留目标列表字段；当前始终返回脱敏目标摘要（include target summary）").
 			note("Reports the discovered root-only abstract Unix socket and Edge/CDP version. It does not open a TCP CDP port.").
 			done(),
-		newTool("browser_navigate",
+		newTool("phone_browser_navigate",
 			"在 Android Edge 中打开 URL（open a URL in Microsoft Edge for Android）",
 			"POST", "/api/v1/browser/navigate").
 			str("url", "要打开的 URL（URL to open）").need("url").
 			note("Uses Edge's native Chromium DevTools Protocol over its root-only abstract Unix socket. If Edge is not running, it is launched once with ACTION_VIEW and then driven by CDP.").
 			done(),
-		newTool("browser_snapshot",
+		newTool("phone_browser_snapshot",
 			"读取 Edge 当前页面的 DOM 快照（DOM snapshot from native CDP; better than screenshot for actions）",
 			"GET", "/api/v1/browser/snapshot").ro().
 			int("max_nodes", "最多返回多少个可交互元素，默认 300（max interactive elements）").
-			note("This is a browser-engine DOM snapshot, not Android accessibility. Interactive elements carry stable eN refs for the next browser_click/browser_type call, plus viewport bounds and page text.").
+			note("This is a browser-engine DOM snapshot, not Android accessibility. Interactive elements carry stable eN refs for the next phone_browser_click/phone_browser_type call, plus viewport bounds and page text.").
 			done(),
-		newTool("browser_find",
+		newTool("phone_browser_find",
 			"在 Edge 页面 DOM 快照中查找文本（find text/elements in the current DOM snapshot）",
 			"GET", "/api/v1/browser/find").ro().
 			str("text", "要查找的文本（text to find）").need("text").
 			int("max_nodes", "最多扫描多少个可交互元素，默认 300（scan limit）").
 			note("Searches the CDP DOM snapshot and reports matching eN refs; text_match says whether the visible page text also contains the query.").
 			done(),
-		newTool("browser_take_screenshot",
+		newTool("phone_browser_take_screenshot",
 			"截取 Edge 当前页面（browser-engine page screenshot via CDP）",
 			"GET", "/api/v1/browser/screenshot").ro().as("image").
 			enum("type", "图片格式，默认 png（image type）", "webp", "jpeg", "png").
 			int("quality", "1-100，默认 80（quality）").
 			ren("type", "format").
-			note("Captured with Page.captureScreenshot, so it is the Edge viewport even when Edge is in the background. Use browser_snapshot for element targets.").
+			note("Captured with Page.captureScreenshot, so it is the Edge viewport even when Edge is in the background. Use phone_browser_snapshot for element targets.").
 			done(),
-		newTool("browser_click",
+		newTool("phone_browser_click",
 			"按快照 ref、文本或 viewport 坐标点击 Edge 页面元素（click an Edge element by snapshot target/text/coordinates）",
 			"POST", "/api/v1/browser/click").
 			str("target", "页面快照中的 e12 ref、可见文本，或 \"x,y\" 坐标（snapshot ref, text, or x,y）").
@@ -281,9 +281,9 @@ func buildMCPTools() []*mcpTool {
 			bl("doubleClick", "双击（double click）").
 			num("x", "可选，直接 viewport 坐标 x（optional CDP viewport x）").
 			num("y", "可选，直接 viewport 坐标 y（optional CDP viewport y）").
-			note("target comes from browser_snapshot; prefer target=\"e12\". x/y are CSS viewport coordinates, not physical Android display pixels.").
+			note("target comes from phone_browser_snapshot; prefer target=\"e12\". x/y are CSS viewport coordinates, not physical Android display pixels.").
 			done(),
-		newTool("browser_type",
+		newTool("phone_browser_type",
 			"向 Edge 页面焦点输入框输入文本（type into the focused Edge field）",
 			"POST", "/api/v1/browser/type").
 			str("text", "要输入的文本（text to type）").need("text").
@@ -291,13 +291,13 @@ func buildMCPTools() []*mcpTool {
 			bl("submit", "输入后按 Enter（press Enter after typing）").
 			note("Without target, text goes to the currently focused DOM field. Input.insertText runs inside Edge via CDP.").
 			done(),
-		newTool("browser_press_key",
+		newTool("phone_browser_press_key",
 			"按浏览器键名发送 CDP 键盘事件（press a browser key such as Enter/ArrowDown/Tab）",
 			"POST", "/api/v1/browser/press_key").
 			str("key", "键名，例如 Enter、Tab、ArrowDown、Escape、Backspace（key name）").need("key").
 			note("Uses Input.dispatchKeyEvent inside Edge. A single printable character is entered with Input.insertText.").
 			done(),
-		newTool("browser_scroll",
+		newTool("phone_browser_scroll",
 			"滚动 Edge 页面（scroll the current Edge page with a CDP wheel event）",
 			"POST", "/api/v1/browser/scroll").
 			enum("direction", "滚动方向；down=向下翻页（scroll direction）", "up", "down", "left", "right").
@@ -307,12 +307,12 @@ func buildMCPTools() []*mcpTool {
 			need("direction").
 			note("Uses Input.dispatchMouseEvent type=mouseWheel in the page viewport. down means page down.").
 			done(),
-		newTool("browser_navigate_back",
+		newTool("phone_browser_navigate_back",
 			"在 Edge 中后退（go back in Edge history）",
 			"POST", "/api/v1/browser/back").
 			int("steps", "后退次数，默认 1（number of back presses）").
 			done(),
-		newTool("browser_wait_for",
+		newTool("phone_browser_wait_for",
 			"等待文本出现/消失或时间流逝（wait for text, text to disappear, or time）",
 			"POST", "/api/v1/browser/wait_for").ro().
 			num("time", "等待秒数或超时，最多 30 秒（seconds, max 30）").
@@ -320,12 +320,12 @@ func buildMCPTools() []*mcpTool {
 			str("textGone", "等待消失的目标文本（text to wait to disappear）").
 			note("Polls document.body.innerText through CDP. When text/textGone is present, time acts as a timeout; otherwise it is a plain wait.").
 			done(),
-		newTool("browser_close",
+		newTool("phone_browser_close",
 			"关闭 Edge 页面或强制结束 Edge（close the Edge page or force-stop Edge）",
 			"POST", "/api/v1/browser/close").
 			bl("kill", "连同进程一起结束（also kill the process）").
 			done(),
-		newTool("browser_evaluate",
+		newTool("phone_browser_evaluate",
 			"在 Edge 页面中执行 JavaScript（evaluate JavaScript in the Edge page）",
 			"POST", "/api/v1/browser/evaluate").
 			str("expression", "要执行的 JavaScript 表达式（JavaScript expression）").need("expression").

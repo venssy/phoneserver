@@ -38,6 +38,8 @@ const (
 
 var errEdgeUnavailable = errors.New("Microsoft Edge DevTools socket is unavailable")
 
+const browserDisabledMessage = "Edge browser tools are disabled. Set browser.enabled=true in config.json and restart phoneserver."
+
 type edgeUnixSocket struct {
 	inode string
 	path  string
@@ -632,7 +634,7 @@ func (p *edgeCDPPage) resolveTarget(ctx context.Context, target string) (edgeEle
 		return resolved, err
 	}
 	if !resolved.Found {
-		return resolved, fmt.Errorf("page element %q was not found; call browser_snapshot first", target)
+		return resolved, fmt.Errorf("page element %q was not found; call phone_browser_snapshot first", target)
 	}
 	return resolved, nil
 }
@@ -845,6 +847,16 @@ func writeBrowserError(w http.ResponseWriter, err error) {
 
 func browserTimeout(r *http.Request) (context.Context, context.CancelFunc) {
 	return context.WithTimeout(r.Context(), edgeDefaultTimeout)
+}
+
+func (a *App) browserGuard(h http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if !a.config().Browser.Enabled {
+			writeErr(w, http.StatusForbidden, browserDisabledMessage)
+			return
+		}
+		h(w, r)
+	}
 }
 
 func (a *App) handleBrowserStatus(w http.ResponseWriter, r *http.Request) {

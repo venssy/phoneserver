@@ -17,19 +17,19 @@ import (
 
 func TestBrowserToolTableUsesCDPEndpoints(t *testing.T) {
 	want := map[string]string{
-		"browser_status":          "/api/v1/browser/status",
-		"browser_navigate":        "/api/v1/browser/navigate",
-		"browser_snapshot":        "/api/v1/browser/snapshot",
-		"browser_find":            "/api/v1/browser/find",
-		"browser_take_screenshot": "/api/v1/browser/screenshot",
-		"browser_click":           "/api/v1/browser/click",
-		"browser_type":            "/api/v1/browser/type",
-		"browser_press_key":       "/api/v1/browser/press_key",
-		"browser_scroll":          "/api/v1/browser/scroll",
-		"browser_navigate_back":   "/api/v1/browser/back",
-		"browser_wait_for":        "/api/v1/browser/wait_for",
-		"browser_close":           "/api/v1/browser/close",
-		"browser_evaluate":        "/api/v1/browser/evaluate",
+		"phone_browser_status":          "/api/v1/browser/status",
+		"phone_browser_navigate":        "/api/v1/browser/navigate",
+		"phone_browser_snapshot":        "/api/v1/browser/snapshot",
+		"phone_browser_find":            "/api/v1/browser/find",
+		"phone_browser_take_screenshot": "/api/v1/browser/screenshot",
+		"phone_browser_click":           "/api/v1/browser/click",
+		"phone_browser_type":            "/api/v1/browser/type",
+		"phone_browser_press_key":       "/api/v1/browser/press_key",
+		"phone_browser_scroll":          "/api/v1/browser/scroll",
+		"phone_browser_navigate_back":   "/api/v1/browser/back",
+		"phone_browser_wait_for":        "/api/v1/browser/wait_for",
+		"phone_browser_close":           "/api/v1/browser/close",
+		"phone_browser_evaluate":        "/api/v1/browser/evaluate",
 	}
 	for name, path := range want {
 		tool, ok := findTool(name)
@@ -42,6 +42,9 @@ func TestBrowserToolTableUsesCDPEndpoints(t *testing.T) {
 		if tool.path != path {
 			t.Errorf("%s path = %q, want %q", name, tool.path, path)
 		}
+	}
+	if _, ok := findTool("browser_navigate"); ok {
+		t.Fatal("unprefixed browser_navigate must not remain registered")
 	}
 }
 
@@ -61,13 +64,80 @@ func TestBrowserNavigateBuildsCDPRequest(t *testing.T) {
 	}))
 	defer ts.Close()
 
-	tool, _ := findTool("browser_navigate")
+	tool, _ := findTool("phone_browser_navigate")
 	blocks, isErr := testMCPServer(ts.URL).invoke(context.Background(), tool, map[string]any{"url": "https://example.com"})
 	if isErr {
 		t.Fatalf("unexpected error: %s", browserContentText(blocks))
 	}
 	if got["url"] != "https://example.com" {
 		t.Fatalf("navigate body = %#v", got)
+	}
+}
+
+func TestBrowserMCPToolsRequireConfigEnable(t *testing.T) {
+	server := func(enabled bool) *mcpServer {
+		cfg := defaultConfig()
+		cfg.Browser.Enabled = enabled
+		return &mcpServer{cfgFn: func() Config { return cfg }}
+	}
+	listTools := func(s *mcpServer) map[string]bool {
+		resp, ok := s.handleMessage(json.RawMessage(`{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{}}`))
+		if !ok || resp == nil || resp.Error != nil {
+			t.Fatalf("tools/list response = %#v", resp)
+		}
+		result, _ := resp.Result.(map[string]any)
+		tools, _ := result["tools"].([]map[string]any)
+		names := map[string]bool{}
+		for _, tool := range tools {
+			name, _ := tool["name"].(string)
+			names[name] = true
+		}
+		return names
+	}
+
+	disabled := listTools(server(false))
+	if disabled["phone_browser_navigate"] {
+		t.Fatal("phone_browser_navigate was listed while browser.enabled=false")
+	}
+	enabled := listTools(server(true))
+	if !enabled["phone_browser_navigate"] || !enabled["phone_browser_snapshot"] {
+		t.Fatal("phone_browser tools were not listed while browser.enabled=true")
+	}
+
+	resp, _ := server(false).handleMessage(json.RawMessage(`{
+		"jsonrpc":"2.0","id":2,"method":"tools/call",
+		"params":{"name":"phone_browser_navigate","arguments":{"url":"https://example.com"}}
+	}`))
+	result, _ := resp.Result.(map[string]any)
+	if result["isError"] != true {
+		t.Fatalf("disabled browser call result = %#v", result)
+	}
+	content, _ := result["content"].([]contentBlock)
+	if len(content) == 0 || !strings.Contains(content[0].Text, "browser.enabled=true") {
+		t.Fatalf("disabled browser error = %#v", content)
+	}
+}
+
+func TestBrowserRESTGuardRequiresConfigEnable(t *testing.T) {
+	called := false
+	handler := func(w http.ResponseWriter, r *http.Request) {
+		called = true
+		w.WriteHeader(http.StatusNoContent)
+	}
+	app := &App{cfg: defaultConfig()}
+	rec := httptest.NewRecorder()
+	app.browserGuard(handler)(rec, httptest.NewRequest(http.MethodGet, "/api/v1/browser/status", nil))
+	if rec.Code != http.StatusForbidden || called {
+		t.Fatalf("disabled status = %d, called=%v, body=%s", rec.Code, called, rec.Body.String())
+	}
+
+	cfg := defaultConfig()
+	cfg.Browser.Enabled = true
+	app.setConfig(cfg)
+	rec = httptest.NewRecorder()
+	app.browserGuard(handler)(rec, httptest.NewRequest(http.MethodGet, "/api/v1/browser/status", nil))
+	if rec.Code != http.StatusNoContent || !called {
+		t.Fatalf("enabled status = %d, called=%v", rec.Code, called)
 	}
 }
 
@@ -222,6 +292,7 @@ func TestBrowserSnapshotOverAbstractUnixCDP(t *testing.T) {
 	defer server.Close()
 
 	cfg := defaultConfig()
+	cfg.Browser.Enabled = true
 	cfg.Browser.Socket = socket
 	app := &App{cfg: cfg}
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/browser/snapshot", nil)

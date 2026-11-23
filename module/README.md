@@ -131,11 +131,11 @@ MCP（给 AI agent）
 
     mcp.read_only=true 时只暴露只读工具。
 
-    Android Edge（Browser Use 风格）：
-      browser_navigate / browser_navigate_back
-      browser_snapshot / browser_find
-      browser_click / browser_type / browser_press_key / browser_scroll / browser_wait_for
-      browser_take_screenshot / browser_evaluate / browser_close / browser_status
+    Android Edge（Browser Use 风格；config.json 需设置 browser.enabled=true）：
+      phone_browser_navigate / phone_browser_navigate_back
+      phone_browser_snapshot / phone_browser_find
+      phone_browser_click / phone_browser_type / phone_browser_press_key / phone_browser_scroll / phone_browser_wait_for
+      phone_browser_take_screenshot / phone_browser_evaluate / phone_browser_close / phone_browser_status
     底层使用 com.microsoft.emmx 原生 CDP，直连 root-only DevTools 抽象 Unix socket；
     默认不开放原始 9222 端口。自动发现失败时设置 browser.socket
     （例如 {"browser":{"socket":"@chrome_devtools_remote"}}）。
