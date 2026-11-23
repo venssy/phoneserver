@@ -649,6 +649,22 @@ adb pull $DATA/history.db
 - 测试：`go test ./...`（`build.sh` 把测试当门禁，红了不会打包）。
 - 真机端到端自检：`scripts/smoke.sh <base-url> <token> [--with-input] [--with-camera]`，逐条打印 PASS/FAIL（含「该被拒绝的端点是否真的拒绝了」）。
 - 仓库：**https://github.com/Kailoinf/phoneserver**（源码为准，release 里是安装包）。WebUI 源码在 `webui/`，构建产物在 `module/webroot/`。
-- 发布：`gh release create vX.Y.Z phoneserver-module.zip --title ... --notes ...`；版本号要同时改 `module/module.prop` 与 `main.go` 里的 `version` 常量（二进制会自报版本，`/api/v1/health` 可以核）。
+### 发布
+
+发布由 GitHub Actions 自动完成（`.github/workflows/release.yml`），不再需要手工 `gh release`：
+
+1. **统一版本号**：把 `main.go` 里的 `version` 常量、`module/module.prop` 的 `version`、`webui/package.json` 的 `version` 改成一致的 `X.Y.Z`；`module/module.prop` 的 `versionCode` 按 `X*10000+Y*100+Z` 计算。二进制会自报版本，可用 `/api/v1/health` 核对。
+2. **打 tag 并推送**：`git tag vX.Y.Z`（预发布可用 `vX.Y.Z-rc1`），`git push origin vX.Y.Z`。
+3. **CI 自动发布**：Actions 依次执行版本一致性检查、WebUI 构建、`go test`、linux/arm64 静态编译、zip 打包，然后创建或幂等更新 GitHub Release，并上传三个资产：
+   - `phoneserver-module.zip` —— 可刷入的模块安装包；
+   - `phoneserver-arm64` —— arm64 静态二进制，可单独使用；
+   - `phoneserver-module.zip.sha256` —— `phoneserver-module.zip` 的校验和，下载后用于核对完整性。
+
+要点：
+
+- **版本一致性由 CI 强制校验**：tag 的基础版本必须等于上述三个版本字段，`versionCode` 必须与计算值一致；任何不一致都会让 job 失败，不产生发布。
+- **幂等**：重推同名 tag 会更新已有 Release 并用 `--clobber` 覆盖资产，不会创建重复的 Release。
+- **WebUI 以 CI 构建为准**：发布流水线按锁文件安装依赖、从 `webui/` 源码重建 WebUI，失败即中止，不回退到已提交的 `module/webroot/`；本地 `./build.sh` 的 WebUI 软回退仅是开发便利，不用于发布物。
+- **权限与安全**：工作流只申请 `contents: write`，使用 GitHub 自动提供的 token，不依赖自定义 secret。建议仓库管理员为 `v*` 标签开启保护规则（仅维护者可推送 tag）。
 
 许可证：MIT。
